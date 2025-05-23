@@ -130,181 +130,167 @@ data "aws_iam_role" "ecs_task_execution" {
   name = "ecsTaskExecutionRole"
 }
 
+
 # Attach AWS managed execution role policy
 resource "aws_iam_role_policy_attachment" "execution_attach" {
   role       = data.aws_iam_role.ecs_task_execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Custom inline policy with EC2 + DynamoDB permissions
-resource "aws_iam_role_policy" "ecs_custom_permissions" {
-  name = "ecs-custom-access"
-  role = data.aws_iam_role.ecs_task_execution.id
+# ---------------------------
+# IAM Policy + Role for Scheduler
+# ---------------------------
+resource "aws_iam_policy" "instance_scheduler_policy" {
+  name        = "InstanceSchedulerAppPolicy_v2"
+  description = "Policy for Instance Scheduler application"
 
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
-        Sid    = "EC2Control"
-        Effect = "Allow"
+        Effect = "Allow",
         Action = [
-          "ec2:DescribeInstances",
-          "ec2:StartInstances",
-          "ec2:StopInstances"
-        ]
-        Resource = "*"
+          "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:UpdateItem", "dynamodb:DeleteItem"
+        ],
+        Resource = [aws_dynamodb_table.config_table.arn]
       },
       {
-        Sid    = "DynamoDBAccess"
-        Effect = "Allow"
-        Action = [
-          "dynamodb:PutItem",
-          "dynamodb:GetItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:Scan",
-          "dynamodb:Query"
-        ]
-        Resource = "* "
+        Effect = "Allow",
+        Action = ["ec2:DescribeInstances", "ec2:CreateTags", "ec2:DeleteTags"],
+        Resource = "*"
       }
     ]
   })
 }
 
+resource "aws_iam_role" "instance_scheduler_temp_role" {
+  name = "InstanceSchedulerTempRole_v2"
 
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action    = "sts:AssumeRole",
+        Effect    = "Allow",
+        Principal = { AWS = "arn:aws:iam::370389955750:user/Mehul" }
+      }
+    ]
+  })
+}
 
-# # 3. ECS Cluster
-# resource "aws_ecs_cluster" "instance-schedular" {
-#   name = "instance-schedular-fargate-ec2"
-# }
+resource "aws_iam_role_policy_attachment" "instance_scheduler_attachment" {
+  role       = aws_iam_role.instance_scheduler_temp_role.name
+  policy_arn = aws_iam_policy.instance_scheduler_policy.arn
+}
+# ---------------------------
+# DynamoDB Table
+# ---------------------------
+resource "aws_dynamodb_table" "config_table" {
+  name         = "instance-scheduler-ConfigTable"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+  range_key    = "name"
 
-# # 4. Load Balancer
-# resource "aws_lb" "ecs_alb" {
-#   name               = "fargate-ecs-alb"
-#   internal           = false
-#   load_balancer_type = "application"
-#   security_groups    = [aws_security_group.fargate-lb_sg.id]
-#   subnets            = var.subnet_id
-
-#   enable_deletion_protection = false
-# }
-
-# resource "aws_lb_target_group" "ecs_tg" {
-#   name     = "ecs-tg"
-#   port     = 80
-#   protocol = "HTTP"
-#   vpc_id   = var.vpc_id
-#   target_type = "ip"
-
+  attribute {
+    name = "id"
+    type = "S"
+  }
   
+  attribute {
+    name = "name"
+    type = "S"
+  }
 
-#   health_check {
-#     path                = "/"
-#     interval            = 30
-#     timeout             = 5
-#     healthy_threshold   = 5
-#     unhealthy_threshold = 2
-#     matcher             = "200-399"
-#   }
-# }
+  attribute {
+    name = "start_time"
+    type = "S"
+  }
 
-# resource "aws_lb_listener" "ecs_listener" {
-#   load_balancer_arn = aws_lb.ecs_alb.arn
-#   port              = 80
-#   protocol          = "HTTP"
+  attribute {
+    name = "stop_time"
+    type = "S"
+  }
 
-#   default_action {
-#     type             = "forward"
-#     target_group_arn = aws_lb_target_group.ecs_tg.arn
-#   }
-# }
-
-# # 5. Security Group for ALB
-# resource "aws_security_group" "fargate-lb_sg" {
-#   name        = "ecs-lb-sg-fargate"
-#   description = "Allow HTTP access"
-#   vpc_id      = var.vpc_id
-
-#   ingress {
-#     from_port   = 80
-#     to_port     = 80
-#     protocol    = "tcp"
-#     cidr_blocks = ["0.0.0.0/0"]
-#   }
-
-#   egress {
-#     from_port   = 0
-#     to_port     = 0
-#     protocol    = "-1"
-#     cidr_blocks = ["0.0.0.0/0"]
-#   }
-# }
-
-# # 6. Task Definition
-# resource "aws_ecs_task_definition" "web" {
-#   family                   = "fargate-task"
-#   requires_compatibilities = ["FARGATE"]
-#   cpu                      = "256"
-#   memory                   = "512"
-#   network_mode             = "awsvpc"
-#   execution_role_arn       = data.aws_iam_role.ecs_task_execution.arn
-
-#   container_definitions = jsonencode([
-#     {
-#       name      = "web-app"
-#       image     = "nginx:latest"
-#       portMappings = [
-#         {
-#           containerPort = 80
-#           hostPort      = 80
-#         }
-#       ]
-#     }
-#   ])
-# }
-
-# # 7. ECS Service
-# resource "aws_ecs_service" "web" {
-#   name            = "web-service"
-#   cluster         = aws_ecs_cluster.instance-schedular.id
-#   task_definition = aws_ecs_task_definition.web.arn
-#   desired_count   = 1
-#   launch_type     = "FARGATE"
-
-#   network_configuration {
-#     subnets         = var.subnet_id
-#     security_groups = [aws_security_group.fargate-lb_sg.id]
-#     assign_public_ip = true
-#   }
-
-#   load_balancer {
-#     target_group_arn = aws_lb_target_group.ecs_tg.arn
-#     container_name   = "web-app"
-#     container_port   = 80
-#   }
-
-#   depends_on = [aws_lb_listener.ecs_listener]
-# }
+  attribute {
+    name = "time_zone"
+    type = "S"
+  }
 
 
-# resource "aws_dynamodb_table" "schedular-dynamodb" {
-#   name           = "UserRecords"
-#   billing_mode   = "PAY_PER_REQUEST" 
-#   hash_key       = "UserID"
+  attribute {
+    name = "initiate_date"
+    type = "S"
+  }
 
-#   attribute {
-#     name = "UserID"
-#     type = "S"
-#   }
+  attribute {
+    name = "end_date"
+    type = "S"
+  }
 
-# tags = {
-#   Environment = "test"
-#   Project     = "farget-project"          
-#   Service     = "ecs-fargate-dynamodb"
-#   ManagedBy   = "Terraform"       
-#   Team        = "DevOps"
-#   }
-# }
+  attribute {
+    name = "frequency"
+    type = "S"
+  }
+
+  attribute {
+    name = "week_days"
+    type = "S"
+  }
+
+  attribute {
+    name = "dates"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name = "startTimeIndex"
+    hash_key = "start_time"
+    projection_type = "ALL"
+  }
+
+ global_secondary_index {
+    name            = "stopTimeIndex"
+    hash_key        = "stop_time"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "timeZoneIndex"
+    hash_key        = "time_zone"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "initiateDateIndex"
+    hash_key        = "initiate_date"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "endDateIndex"
+    hash_key        = "end_date"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "frequencyIndex"
+    hash_key        = "frequency"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "weekDaysIndex"
+    hash_key        = "week_days"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "DaysIndex"
+    hash_key        = "dates"
+    projection_type = "ALL"
+  }
+
+}
 
 # ECS Cluster
 resource "aws_ecs_cluster" "instance_schedular" {
@@ -393,6 +379,14 @@ resource "aws_security_group" "ecs_task_sg" {
   }
 }
 
+# creating Cloud watch for ecs
+resource "aws_cloudwatch_log_group" "ecs_logs" {
+  count = var.create_cloudwatch_log_group ? 1 : 0
+  name  = "/ecs/fargate-task"
+  retention_in_days = 7
+}
+
+
 # Task Definition
 resource "aws_ecs_task_definition" "web" {
   family                   = "fargate-task"
@@ -413,6 +407,15 @@ resource "aws_ecs_task_definition" "web" {
           hostPort      = 80
         }
       ]
+        logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = var.create_cloudwatch_log_group ? aws_cloudwatch_log_group.ecs_logs[0].name : "/ecs/fargate-task"
+          awslogs-region        = var.region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+
     }
   ])
 }
