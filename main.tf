@@ -5,3 +5,4 @@ module "ecs-lb-fargate" {
   subnet_id = var.subnet_id
  # subnet_id = concat(data.aws_subnets.public.ids, [data.aws_subnets.private.ids[0]])
 }
+
