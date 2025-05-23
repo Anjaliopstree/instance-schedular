@@ -21,3 +21,23 @@ output "private_subnets" {
 output "public_subnets" {
   value = data.aws_subnets.public.ids
 }
+
+output "alb_dns" {
+  value = module.ecs-lb-fargate.load_balancer_dns_name
+}
+
+output "vpc_id" {
+  value = module.ecs-lb-fargate.vpc_id
+}
+
+output "ecs_cluster_arn" {
+  value = module.ecs-lb-fargate.ecs_cluster_arn
+}
+
+output "cloudwatch_log_group_name" {
+  value = module.ecs-lb-fargate.cloudwatch_log_group_name
+}
+
+output "aws_dynamodb_table_arn" {
+  value = module.ecs-lb-fargate.aws_dynamodb_table_arn
+}
