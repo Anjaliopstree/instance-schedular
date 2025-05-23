@@ -1,5 +1,6 @@
 module "ecs-lb-fargate" {
   source    = "./module"
+  region = var.region
   azs       = var.azs
   vpc_id    = data.aws_vpc.fetch-vpc.id
   subnet_id = var.subnet_id
