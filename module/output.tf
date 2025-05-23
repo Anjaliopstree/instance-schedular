@@ -55,3 +55,23 @@
 #   value       = aws_nat_gateway.nat_gateway[*].id
 # }
 
+output "load_balancer_dns_name" {
+  value = aws_lb.ecs_alb.dns_name
+}
+
+output "vpc_id" {
+  value = var.vpc_id
+}
+
+output "ecs_cluster_arn" {
+  value = aws_ecs_cluster.instance_schedular.arn
+}
+
+output "cloudwatch_log_group_name" {
+  value       = var.create_cloudwatch_log_group ? aws_cloudwatch_log_group.ecs_logs[0].name : null
+  description = "Name of the created CloudWatch log group"
+}
+
+output "aws_dynamodb_table_arn" {
+  value = aws_dynamodb_table.config_table.arn
+}
