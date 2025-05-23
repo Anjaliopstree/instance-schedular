@@ -120,6 +120,10 @@ variable "azs" {
 # }
 #--------------------------------------
 
+variable "region" {
+  description = "region"
+  type        = string
+}
 variable "vpc_id" {
   description = "fetch vpc id"
   type        = string
@@ -129,4 +133,10 @@ variable "subnet_id" {
   description = "fetch subnet id"
   type        = list(string)
   default     = []
+}
+
+variable "create_cloudwatch_log_group" {
+  description = "Whether to create a CloudWatch log group"
+  type        = bool
+  default     = true
 }
